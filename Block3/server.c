@@ -3,16 +3,15 @@
 #include <string.h>
 #include <stdint.h>
 #include <arpa/nameser_compat.h>
-#include <string.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
+#include <inttypes.h>
 #include "protocol.h"
 #include "src/uthash.h"
 
@@ -132,6 +131,7 @@ void sendGet(int *socket, User *user)
     {
         sendData(socket, key, user->keyLength);
         sendData(socket, value, user->valueLength);
+        printf("SEND GET! Clients turn now..\n");
     }
 }
 void sendRequest(int *socket, Body *body, Header *header)
@@ -149,14 +149,14 @@ void sendRequest(int *socket, Body *body, Header *header)
     }
     else if (header->info == 4)
     {
+        printf("GET!\n");
         User *user = find_user(body, header);
         sendGet(socket, user);
     }
 }
 
-int createSocket(uint32_t ip, uint16_t port, int clientOrServer)
 {
-    int sockfd = 0, sockserv = 0;
+    int createSocket(uint32_t ip, uint16_t port, int clientOrServer) int sockfd = 0, sockserv = 0;
     struct addrinfo hints;
     struct addrinfo *servinfo, *result;
 
@@ -168,9 +168,7 @@ int createSocket(uint32_t ip, uint16_t port, int clientOrServer)
     hints.ai_flags = AI_PASSIVE;
 
     char connectIp[INET_ADDRSTRLEN];
-
     inet_ntop(AF_INET, &(ip), connectIp, INET_ADDRSTRLEN);
-
     char connectPort[16];
     sprintf(connectPort, "%d", port);
 
@@ -237,11 +235,21 @@ int sendControl(Control *reply, Peer target)
 
     int targetfd = createSocket(target.ip, target.port, 0);
 
+    // uint16_t hashId;
+    // uint16_t nodeId;
+    // uint32_t nodeIp;
+    // uint16_t nodePort;
+
+    uint16_t hashId = htons(reply->hashId);
+    uint16_t nodeId = htons(reply->nodeId);
+    uint32_t nodeIp = htonl(reply->nodeIp);
+    uint16_t nodePort = htons(reply->nodePort);
+
     sendData(&targetfd, &(reply->info), sizeof(uint8_t));
-    sendData(&targetfd, &(reply->hashId), sizeof(uint16_t));
-    sendData(&targetfd, &(reply->nodeId), sizeof(uint16_t));
-    sendData(&targetfd, &(reply->nodeIp), sizeof(uint32_t));
-    sendData(&targetfd, &(reply->nodePort), sizeof(uint16_t));
+    sendData(&targetfd, &(hashId), sizeof(uint16_t));
+    sendData(&targetfd, &(nodeId), sizeof(uint16_t));
+    sendData(&targetfd, &(nodeIp), sizeof(uint32_t));
+    sendData(&targetfd, &(nodePort), sizeof(uint16_t));
 
     close(targetfd);
     return 0;
@@ -310,8 +318,9 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
         Header *header = rcvHeader(new_sock, info); // to receive the data from Header
         if (header != NULL)
         {
+            printHeader(header);
             Body *body = readBody(new_sock, header);
-            printf("Header data revieced!\n");
+            printf("\nHeader data revieced! Body Value Size: %d \n", sizeof(body->value));
             if (body != NULL)
             {
                 sendRequest(new_sock, body, header); // if the receive of the data of the header succeed , read the data of Body
@@ -344,34 +353,52 @@ int main(int argc, char *argv[])
     peerdata.self = self;
     peerdata.successor = suc;
 
-    //! START OF X
+    // ! START OF Socket Connections
+    fd_set master, read_fds;
+    // fd_set read_fds;
+    int fdmax;
 
-    // sigaction(SIGPIPE, &(struct sigaction){SIG_IGN}, NULL);
-    // int sockserv, s, a;
-    // int new_sock;
-    // struct addrinfo hints;
-    // struct addrinfo *servinfo, *result;
     socklen_t addr_size;
     struct sockaddr_storage their_addr;
-    // int bytes_sent;
+    int new_sock;
+    int i, j, rv;
 
-    int new_sock, a;
-
-    int sockserv = createSocket(peerdata.self.ip, peerdata.self.port, 1);
+    int listener = createSocket(peerdata.self.ip, peerdata.self.port, 1);
 
     // 10 connections allowed in this case
-    a = listen(sockserv, 10);
-    if (a == -1)
+    if (listen(listener, 10) == -1)
     {
-        printf("error right here!");
         fprintf(stderr, "%s/n", strerror(errno));
         exit(EXIT_FAILURE);
+    }
+
+    FD_SET(listener, &master);
+    fdmax = listener;
+
+    while (1)
+    {
+        read_fds = master;
+        if (select(fdmax + 1, &read_fds, NULL, NULL, NULL) == -1)
+        {
+            perror("select");
+            exit(4);
+        }
+
+        for (i = 3; i <= fdmax; i++)
+        {
+            if (FD_ISSET(i, &read_fds))
+            {
+                if (i == listener)
+                {
+                }
+            }
+        }
     }
 
     while (1)
     {
         addr_size = sizeof their_addr;
-        new_sock = accept(sockserv, (struct sockaddr *)&their_addr, &addr_size);
+        new_sock = accept(listener, (struct sockaddr *)&their_addr, &addr_size);
         printf("got a socket!");
         if (new_sock == -1)
         {

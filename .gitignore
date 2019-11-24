@@ -12,3 +12,4 @@ CTestTestfile.cmake
 *.DS_Store
 *.iml
 idea/**
+*.name

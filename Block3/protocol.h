@@ -36,4 +36,5 @@ Control *recvControl(int *socket, Info *info);
 Header *rcvHeader(int *socket, Info *info);
 Body *readBody(int *socket, Header *header);
 void sendData(int *socket, void *data, int dataLength);
+void printHeader(Header *header);
 #endif //UNTITLED_PROTOCOL_H

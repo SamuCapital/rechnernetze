@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include "protocol.h"
 
 char *readStdin(int *valuelength)
@@ -106,8 +107,8 @@ int main(int argc, char *argv[])
         //read File
         buffer = readStdin(&valuelength);
 
-        printf("let's connect to %d\n, fileSize: %d\n", argv[2], sizeof(buffer));
-
+        Info *info = malloc(sizeof(Info));
+        info->info = (uint8_t)2;
         //setHeader
         Header *setHeader = malloc(sizeof(Header));
         setHeader->info = (uint8_t)2;
@@ -128,7 +129,7 @@ int main(int argc, char *argv[])
         sendData(&sockfd, setBody->value, valuelength);
 
         //receive header with ack bit
-        setHeader = rcvHeader(&sockfd);
+        setHeader = rcvHeader(&sockfd, info);
 
         free(buffer);
         free(setHeader);
@@ -138,14 +139,17 @@ int main(int argc, char *argv[])
     if (memcmp(method, "GET", 3) == 0)
     {
 
-        printf("let's connect to %d\n", argv[3]);
+        printf("let's connect to %d\n", argv[2]);
+
+        Info *info = malloc(sizeof(Info));
+        info->info = (uint8_t)4;
 
         Header *getHeader = malloc(sizeof(Header));
-        getHeader->info = (uint8_t)4;
-
-        getHeader->info = (uint8_t)4;
+        getHeader->info = info->info;
         getHeader->keyLength = htons((uint16_t)(strlen(path)));
         getHeader->valueLength = htonl((uint32_t)0);
+
+        printHeader(getHeader);
 
         Body *getBody = malloc(sizeof(Body));
         getBody->key = path;
@@ -154,21 +158,36 @@ int main(int argc, char *argv[])
         sendData(&sockfd, &(getHeader->info), sizeof(uint8_t));
         sendData(&sockfd, &(getHeader->keyLength), sizeof(uint16_t));
         sendData(&sockfd, &(getHeader->valueLength), sizeof(uint32_t));
-
         sendData(&sockfd, getBody->key, getHeader->keyLength);
 
-        getHeader = rcvHeader(&sockfd);
-        getBody = readBody(&sockfd, getHeader);
+        free(info);
 
-        writeStdout(getBody->value, &(getHeader->valueLength));
+        Info *infoRecv = malloc(sizeof(info));
+        Header *recvHeader = malloc(sizeof(Header));
+        infoRecv = recvInfo(&sockfd);
+        recvHeader = rcvHeader(&sockfd, infoRecv);
+        fprintf(stderr, "%s\n", "error AFTER HEADER\n");
+        fprintf(stderr, "Value length: %" PRIu32 "\n", "!", recvHeader->valueLength);
+
+        printHeader(recvHeader);
+
+        getBody = readBody(&sockfd, recvHeader);
+        fprintf(stderr, "%s\n", "error AFTER body\n");
+
+        writeStdout(getBody->value, &(recvHeader->valueLength));
         free(buffer);
         valuelength = 0;
         free(getBody);
         free(getHeader);
+
+        free(recvHeader);
     }
 
     if (memcmp(method, "DELETE", 6) == 0)
     {
+
+        Info *info = malloc(sizeof(Info));
+        info->info = (uint8_t)1;
 
         Header *delHeader = malloc(sizeof(Header));
         delHeader->info = (uint8_t)1;
@@ -185,7 +204,7 @@ int main(int argc, char *argv[])
 
         sendData(&sockfd, delBody->key, strlen(path));
 
-        delHeader = rcvHeader(&sockfd);
+        delHeader = rcvHeader(&sockfd, info);
 
         free(delHeader);
         free(delBody);
