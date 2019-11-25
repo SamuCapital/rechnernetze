@@ -29,6 +29,7 @@
 //         (byte & 0x02 ? '1' : '0'), \
 //         (byte & 0x01 ? '1' : '0')
 
+//FIXME: NOT WORKING PROPERLY FOR CLIENT GET REQUEST
 void *receive(int *socket, void *data, int dataLength)
 {
     int n, x, receivedData = 0;
@@ -57,14 +58,11 @@ void *receive(int *socket, void *data, int dataLength)
         // n = recv(*socket, datac + receivedData, readSize, 0);
 
         receivedData += n;
-        fprintf(stderr, "read %d bytes!\n", n);
+        // // fprintf(stderr, "read %d bytes!\n", n);
 
         if (n == 0 || receivedData == dataLength || n == -1)
             break;
     }
-    if (n == -1)
-        fprintf(stderr, "n = -1!");
-
     if (n == -1 || receivedData != dataLength)
     {
         fprintf(stderr, "%s\n", strerror(errno));
@@ -73,7 +71,7 @@ void *receive(int *socket, void *data, int dataLength)
             fprintf(stderr, "number of Bytes is not enough to read the packet");
             // exit(1);
         }
-        // return NULL;
+        return NULL;
     }
     return data;
 
@@ -206,7 +204,7 @@ void sendData(int *socket, void *data, int dataLength)
     if (n == -1)
     {
         fprintf(stderr, "%s/n", strerror(errno));
-        //return -1;
+        // return -1;
     }
     //return sentData;
 }

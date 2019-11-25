@@ -41,7 +41,28 @@ typedef struct my_struct
 
 } User;
 
+//TODO: SETUP INTERNAL HASH TABLE
+// typedef struct internal_hash
+// {
+//     int Socket;
+//     uint16_t hashId;
+//     UT_hash_handle hh;
+// } SocketHash;
+
+// SocketHash *socket_hashes = NULL;
+
+// SocketHash *find_hash(uint16_t hash)
+// {
+//     SocketHash *sh = NULL;
+//     HASH_FIND_BYHASHVALUE(hh, socket_hashes, hash, 16, 0, sh);
+//     return sh;
+// }
+
 PeerData peerdata; //initialize global variable for peer information
+
+/* -------------------------------------------------------------------------- */
+/*                      //ANCHOR: DISTRIBUTED HASH TABLE                      */
+/* -------------------------------------------------------------------------- */
 
 User *users = NULL;
 
@@ -51,6 +72,9 @@ User *find_user(Body *body, Header *header)
     HASH_FIND_BYHASHVALUE(hh, users, body->key, header->keyLength, 0, user);
     return user;
 }
+
+/* -------------------------------------------------------------------------- */
+
 void delete_user(Body *body, Header *header)
 {
     User *user = NULL;
@@ -63,6 +87,9 @@ void delete_user(Body *body, Header *header)
         free((user));
     }
 }
+
+/* -------------------------------------------------------------------------- */
+
 void add_user(Body *body, Header *header)
 {
     if (find_user(body, header) == NULL)
@@ -75,6 +102,9 @@ void add_user(Body *body, Header *header)
         HASH_ADD_KEYPTR_BYHASHVALUE(hh, users, newUser->key, newUser->keyLength, 0, newUser);
     }
 }
+
+/* -------------------------------------------------------------------------- */
+
 void deleteAll()
 {
     for (User *s = users; s != NULL; s->hh.next)
@@ -85,6 +115,13 @@ void deleteAll()
         free((s));
     }
 }
+
+/* ------------------------- END OF DATA MANAGEMENT ------------------------- */
+
+/* -------------------------------------------------------------------------- */
+/*                        //ANCHOR: RESPONSE MANAGEMENT                       */
+/* -------------------------------------------------------------------------- */
+
 void sendDelete(int *socket)
 {
     uint8_t info;
@@ -97,6 +134,9 @@ void sendDelete(int *socket)
     sendData(socket, (void *)(&keyLength), 2);
     sendData(socket, (void *)(&valueLength), 4);
 }
+
+/* -------------------------------------------------------------------------- */
+
 void sendSet(int *socket)
 {
     uint8_t info;
@@ -109,6 +149,9 @@ void sendSet(int *socket)
     sendData(socket, (void *)(&keyLength), 2);
     sendData(socket, (void *)(&valueLength), 4);
 }
+
+/* -------------------------------------------------------------------------- */
+
 void sendGet(int *socket, User *user)
 {
     uint8_t info = 4; // in case the key ist not in the hash table (the AKC Bit is not set )
@@ -134,6 +177,9 @@ void sendGet(int *socket, User *user)
         printf("SEND GET! Clients turn now..\n");
     }
 }
+
+/* -------------------------------------------------------------------------- */
+
 void sendRequest(int *socket, Body *body, Header *header)
 {
     if (header->info == 1)
@@ -155,8 +201,15 @@ void sendRequest(int *socket, Body *body, Header *header)
     }
 }
 
+/* ----------------------- END OF RESPONSE MANAGEMENT ----------------------- */
+
+/* -------------------------------------------------------------------------- */
+/*     //NOTE: CREATES SOCKET AND RETURNS IT, input @clientOrServer 0 or 1    */
+/* -------------------------------------------------------------------------- */
+
+int createSocket(uint32_t ip, uint16_t port, int clientOrServer)
 {
-    int createSocket(uint32_t ip, uint16_t port, int clientOrServer) int sockfd = 0, sockserv = 0;
+    int sockfd = -1, sockserv = -1;
     struct addrinfo hints;
     struct addrinfo *servinfo, *result;
 
@@ -181,6 +234,9 @@ void sendRequest(int *socket, Body *body, Header *header)
     //? 0 to create Client Socket, 1 for Server
     switch (clientOrServer)
     {
+
+        /* -------------------------- CREATES CLIENT SOCKET ------------------------- */
+
     case 0:
         for (result = servinfo; result != NULL; result = result->ai_next)
         {
@@ -197,6 +253,9 @@ void sendRequest(int *socket, Body *body, Header *header)
             }
         }
         break;
+
+        /* -------------------------- CREATES SERVER SOCKET ------------------------- */
+
     case 1:
         for (result = servinfo; result != NULL; result = result->ai_next)
         {
@@ -223,22 +282,20 @@ void sendRequest(int *socket, Body *body, Header *header)
     if (result == NULL)
     {
         fprintf(stderr, "%s\n", strerror(errno));
-        return (1);
+        return (-1);
     }
     printf("returning socket... %d\n", sockfd);
 
     return sockfd > sockserv ? sockfd : sockserv;
 }
 
+/* -------------------------------------------------------------------------- */
+/*                     //NOTE: SENDS DHT INTERNAL MESSAGE                     */
+/* -------------------------------------------------------------------------- */
+
 int sendControl(Control *reply, Peer target)
 {
-
     int targetfd = createSocket(target.ip, target.port, 0);
-
-    // uint16_t hashId;
-    // uint16_t nodeId;
-    // uint32_t nodeIp;
-    // uint16_t nodePort;
 
     uint16_t hashId = htons(reply->hashId);
     uint16_t nodeId = htons(reply->nodeId);
@@ -257,7 +314,6 @@ int sendControl(Control *reply, Peer target)
 
 void handleRequest(int *new_sock, Info *info) //passing adress of objects
 {
-
     //? Case Lookup
     if (info->info == 129)
     {
@@ -267,7 +323,7 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
 
             if (control->hashId > peerdata.self.id && control->hashId < peerdata.successor.id || control->hashId > peerdata.self.id && control->hashId > peerdata.successor.id && peerdata.successor.id < peerdata.self.id)
             {
-                //TODO: SEND REPLY WITH DATA OF SUCCESSOR
+                // // //TODO: SEND REPLY WITH DATA OF SUCCESSOR
 
                 Peer target = {(uint16_t)0, control->nodeIp, control->nodePort};
 
@@ -291,13 +347,13 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
             }
             else if (control->hashId > peerdata.successor.id)
             {
-                //TODO: FORWARD TO SUCCESSOR
                 if (sendControl(control, peerdata.successor) == 0)
                 {
                     printf("Succesfully forwarded lookup!");
                 }
                 else
                 {
+                    //TODO: HANDLE ERROR
                     fprintf(stderr, "%s/n", strerror(errno));
                 }
             }
@@ -308,8 +364,11 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
     //? Case Reply for own Lookup
     else if (info->info == 130)
     {
+        Control *control = recvControl(new_sock, info);
+
         // TODO: HANDLE REPLY
-        // Control *control = recvControl(new_sock, info);
+
+        free(control);
     }
 
     //? Case request (GET/SET/DELETE)
@@ -331,7 +390,23 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
     }
 }
 
-int main(int argc, char *argv[])
+//NOTE: Not really neccessary, but saves time for implementation of IPV6
+
+void *get_in_addr(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET)
+    {
+        return &(((struct sockaddr_in *)sa)->sin_addr);
+    }
+
+    return &(((struct sockaddr_in6 *)sa)->sin6_addr);
+}
+
+/* -------------------------------------------------------------------------- */
+/*                 INITIALIZES PEER DATA IN PROCESSABLE FORMAT                */
+/* -------------------------------------------------------------------------- */
+
+void setPeerData(int argc, char *argv[])
 {
     if (argc < 10)
     {
@@ -340,7 +415,6 @@ int main(int argc, char *argv[])
     }
     fprintf(stdout, "server running\n");
 
-    // initialize peer
     struct sockaddr_in sa;
     inet_pton(AF_INET, argv[2], &(sa.sin_addr));
     Peer pre = {(uint16_t)atoi(argv[1]), sa.sin_addr.s_addr, (uint16_t)atoi(argv[3])};
@@ -352,16 +426,25 @@ int main(int argc, char *argv[])
     peerdata.predecessor = pre;
     peerdata.self = self;
     peerdata.successor = suc;
+}
 
-    // ! START OF Socket Connections
+int main(int argc, char *argv[])
+{
+
+    setPeerData(argc, argv);
+
     fd_set master, read_fds;
     // fd_set read_fds;
     int fdmax;
 
     socklen_t addr_size;
-    struct sockaddr_storage their_addr;
+    struct sockaddr_storage their_addr, remoteaddr;
+    socklen_t addrlen;
+
     int new_sock;
-    int i, j, rv;
+    int yes = 1;
+    int curr_sock, j, rv;
+    char connectIP[INET_ADDRSTRLEN];
 
     int listener = createSocket(peerdata.self.ip, peerdata.self.port, 1);
 
@@ -375,6 +458,8 @@ int main(int argc, char *argv[])
     FD_SET(listener, &master);
     fdmax = listener;
 
+    //ANCHOR: Select server
+
     while (1)
     {
         read_fds = master;
@@ -384,31 +469,65 @@ int main(int argc, char *argv[])
             exit(4);
         }
 
-        for (i = 3; i <= fdmax; i++)
+        for (curr_sock = 3; curr_sock <= fdmax; curr_sock++)
         {
-            if (FD_ISSET(i, &read_fds))
+            if (FD_ISSET(curr_sock, &read_fds))
             {
-                if (i == listener)
+                if (curr_sock == listener)
                 {
+                    addrlen = sizeof(remoteaddr);
+                    new_sock = accept(listener,
+                                      (struct sockaddr *)&remoteaddr,
+                                      &addrlen);
+                    if (new_sock == -1)
+                    {
+                        perror("accepting");
+                    }
+                    else
+                    {
+                        FD_SET(new_sock, &master);
+                        if (new_sock > fdmax)
+                            fdmax = new_sock;
+                        printf("New connection from %s on"
+                               "socket %d\n",
+                               inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&remoteaddr), connectIP, INET_ADDRSTRLEN),
+                               new_sock);
+                    }
+                }
+                else
+                {
+                    Info *info = recvInfo(&curr_sock);
+                    if (info != NULL)
+                    {
+                        handleRequest(&curr_sock, info);
+                        //TODO: ADD TO LOCAL HASHTABLE AND HANDLE SOCKET INSTEAD OF CLOSING IMMEDIATELY
+                        close(curr_sock);
+                        FD_CLR(curr_sock, &master);
+                    }
+                    else
+                    {
+                        close(curr_sock);
+                        FD_CLR(curr_sock, &master);
+                    }
                 }
             }
         }
     }
 
-    while (1)
-    {
-        addr_size = sizeof their_addr;
-        new_sock = accept(listener, (struct sockaddr *)&their_addr, &addr_size);
-        printf("got a socket!");
-        if (new_sock == -1)
-        {
-            fprintf(stderr, "%s/n", strerror(errno));
-        }
+    // while (1)
+    // {
+    //     addr_size = sizeof their_addr;
+    //     new_sock = accept(listener, (struct sockaddr *)&their_addr, &addr_size);
+    //     printf("got a socket!");
+    //     if (new_sock == -1)
+    //     {
+    //         fprintf(stderr, "%s/n", strerror(errno));
+    //     }
 
-        Info *info = recvInfo(&new_sock);
-        handleRequest(&new_sock, info);
-        close(new_sock);
-    }
+    //     Info *info = recvInfo(&new_sock);
+    //     handleRequest(&new_sock, info);
+    //     close(new_sock);
+    // }
 
     deleteAll();
 
