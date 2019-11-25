@@ -39,9 +39,10 @@ typedef struct my_struct
     UT_hash_handle hh;
     // makes this structure hashable
 
-} User;
+} Element;
 
 //TODO: SETUP INTERNAL HASH TABLE
+
 // typedef struct internal_hash
 // {
 //     int Socket;
@@ -64,42 +65,42 @@ PeerData peerdata; //initialize global variable for peer information
 /*                      //ANCHOR: DISTRIBUTED HASH TABLE                      */
 /* -------------------------------------------------------------------------- */
 
-User *users = NULL;
+Element *elements = NULL;
 
-User *find_user(Body *body, Header *header)
+Element *find_element(Body *body, Header *header)
 {
-    User *user = NULL;
-    HASH_FIND_BYHASHVALUE(hh, users, body->key, header->keyLength, 0, user);
-    return user;
+    Element *element = NULL;
+    HASH_FIND_BYHASHVALUE(hh, elements, body->key, header->keyLength, 0, element);
+    return element;
 }
 
 /* -------------------------------------------------------------------------- */
 
-void delete_user(Body *body, Header *header)
+void delete_element(Body *body, Header *header)
 {
-    User *user = NULL;
-    user = find_user(body, header);
-    if (user != NULL)
+    Element *element = NULL;
+    element = find_element(body, header);
+    if (element != NULL)
     {
-        HASH_DEL(users, user);
-        free(user->key);
-        free(user->value);
-        free((user));
+        HASH_DEL(elements, element);
+        free(element->key);
+        free(element->value);
+        free((element));
     }
 }
 
 /* -------------------------------------------------------------------------- */
 
-void add_user(Body *body, Header *header)
+void add_element(Body *body, Header *header)
 {
-    if (find_user(body, header) == NULL)
+    if (find_element(body, header) == NULL)
     {
-        User *newUser = malloc(sizeof(User));
-        newUser->key = body->key;
-        newUser->value = body->value;
-        newUser->keyLength = header->keyLength;
-        newUser->valueLength = header->valueLength;
-        HASH_ADD_KEYPTR_BYHASHVALUE(hh, users, newUser->key, newUser->keyLength, 0, newUser);
+        Element *newElement = malloc(sizeof(Element));
+        newElement->key = body->key;
+        newElement->value = body->value;
+        newElement->keyLength = header->keyLength;
+        newElement->valueLength = header->valueLength;
+        HASH_ADD_KEYPTR_BYHASHVALUE(hh, elements, newElement->key, newElement->keyLength, 0, newElement);
     }
 }
 
@@ -107,9 +108,9 @@ void add_user(Body *body, Header *header)
 
 void deleteAll()
 {
-    for (User *s = users; s != NULL; s->hh.next)
+    for (Element *s = elements; s != NULL; s->hh.next)
     {
-        HASH_DEL(users, s);
+        HASH_DEL(elements, s);
         free(s->key);
         free(s->value);
         free((s));
@@ -152,28 +153,28 @@ void sendSet(int *socket)
 
 /* -------------------------------------------------------------------------- */
 
-void sendGet(int *socket, User *user)
+void sendGet(int *socket, Element *element)
 {
     uint8_t info = 4; // in case the key ist not in the hash table (the AKC Bit is not set )
     uint16_t keyLength = 0;
     uint32_t valueLength = 0;
     void *key = NULL;
     void *value = NULL;
-    if (user != NULL)
+    if (element != NULL)
     {
-        key = user->key;
-        value = user->value;
+        key = element->key;
+        value = element->value;
         info = 12;
-        keyLength = htons(user->keyLength);
-        valueLength = htonl(user->valueLength);
+        keyLength = htons(element->keyLength);
+        valueLength = htonl(element->valueLength);
     }
     sendData(socket, (void *)(&info), 1);
     sendData(socket, (void *)(&keyLength), 2);
     sendData(socket, (void *)(&valueLength), 4);
-    if (user != NULL)
+    if (element != NULL)
     {
-        sendData(socket, key, user->keyLength);
-        sendData(socket, value, user->valueLength);
+        sendData(socket, key, element->keyLength);
+        sendData(socket, value, element->valueLength);
         printf("SEND GET! Clients turn now..\n");
     }
 }
@@ -184,20 +185,20 @@ void sendRequest(int *socket, Body *body, Header *header)
 {
     if (header->info == 1)
     {
-        delete_user(body, header);
+        delete_element(body, header);
         sendDelete(socket);
         return;
     }
     else if (header->info == 2)
     {
-        add_user(body, header);
+        add_element(body, header);
         sendSet(socket);
     }
     else if (header->info == 4)
     {
         printf("GET!\n");
-        User *user = find_user(body, header);
-        sendGet(socket, user);
+        Element *element = find_element(body, header);
+        sendGet(socket, element);
     }
 }
 
