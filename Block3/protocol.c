@@ -187,11 +187,11 @@ Body *readBody(int *socket, Header *header)
 }
 void sendData(int *socket, void *data, int dataLength)
 {
-    // printf("%d bit of data to be sent!:\n", dataLength);
+    // fprintf(stderr, "%d bit of data to be sent!:\n", dataLength);
     int n = 0;
     int sentData = 0;
     char *datac = (char *)data; //cast every pointer to char pointer , to read the buffer byte after Byte
-    // printf("Leading text " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY((int)data), "\n");
+    // fprintf(stderr, "Leading text " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY((int)data), "\n");
     while (1)
     {
         n = send(*socket, datac + sentData, dataLength - sentData, 0);
@@ -213,4 +213,22 @@ void printHeader(Header *header)
 {
     fprintf(stderr, "\n\nHEADER:\nINFO: %" PRIu8 "\nKEYLENGTH: %" PRIu16 "\nVALUELENGTH: %" PRIu32 "\n",
             header->info, header->keyLength, header->valueLength);
+}
+
+void printControl(Control *control)
+{
+    fprintf(stderr, "\nCONTROL:"
+                    "\nINFO: %" PRIu8 "\nHASHID: %" PRIu16 "\nNODEID: %" PRIu16 "\nNODEIP: %" PRIu32 "\nNODEPORT: %" PRIu16 "\n\n",
+            control->info,
+            control->hashId,
+            control->nodeId,
+            control->nodeIp,
+            control->nodePort);
+}
+
+void printControlDetails(uint32_t ip, uint16_t port)
+{
+    char connectIp[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(ip), connectIp, INET_ADDRSTRLEN);
+    fprintf(stderr, "Sending Control to %s on Port: %" PRIu16 "...\n\n", connectIp, port);
 }
