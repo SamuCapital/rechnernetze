@@ -69,7 +69,7 @@ void *receive(int *socket, void *data, int dataLength)
         fprintf(stderr, "%s\n", strerror(errno));
         if (receivedData != dataLength)
         {
-            fprintf(stderr, "number of Bytes is not enough to read the packet");
+            fprintf(stderr, "number of Bytes is not enough to read the packet\n");
             // exit(1);
         }
         return NULL;
@@ -174,7 +174,6 @@ Body *readBody(int *socket, Header *header)
     Body *body = malloc(sizeof(Body));
     void *key = NULL;
     void *value = NULL; //(dont forget to free , if data nis not there)
-    fprintf(stderr, "%s\n", "error not before reading key\n");
     key = receive(socket, key, header->keyLength);
     fprintf(stderr, "%s\n", "about to read value...\n");
 

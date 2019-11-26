@@ -344,6 +344,7 @@ void forwardRequest(Control requestData)
     SocketHash *sHash = find_socketHash(requestData.hashId);
     Header *h = &(sHash->header);
     Body *b = &(sHash->body);
+    //TODO: NETWORK TO HOST
     sendData(&connect, (void *)h->info, sizeof(uint8_t));
     sendData(&connect, (void *)h->keyLength, sizeof(uint16_t));
     sendData(&connect, (void *)h->valueLength, sizeof(uint32_t));
@@ -473,7 +474,6 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
                     //TODO: HANDLE ERROR
                     fprintf(stderr, "%s/n", strerror(errno));
                 }
-
                 free(reply);
             }
             // else if (control->hashId > peerdata.successor.id)
@@ -608,6 +608,7 @@ int main(int argc, char *argv[])
         {
             if (FD_ISSET(curr_sock, &read_fds))
             {
+                printf("working on socket %d", curr_sock);
                 if (curr_sock == listener)
                 {
                     addrlen = sizeof(remoteaddr);
