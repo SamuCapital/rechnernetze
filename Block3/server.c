@@ -651,21 +651,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    // while (1)
-    // {
-    //     addr_size = sizeof their_addr;
-    //     new_sock = accept(listener, (struct sockaddr *)&their_addr, &addr_size);
-    //     printf("got a socket!");
-    //     if (new_sock == -1)
-    //     {
-    //         fprintf(stderr, "%s/n", strerror(errno));
-    //     }
-
-    //     Info *info = recvInfo(&new_sock);
-    //     handleRequest(&new_sock, info);
-    //     close(new_sock);
-    // }
-
     deleteAll();
 
     return 0;
