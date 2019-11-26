@@ -38,28 +38,90 @@ typedef struct my_struct
     uint32_t valueLength;
     UT_hash_handle hh;
     // makes this structure hashable
-
 } Element;
 
 //TODO: SETUP INTERNAL HASH TABLE
 
-// typedef struct internal_hash
-// {
-//     int Socket;
-//     uint16_t hashId;
-//     UT_hash_handle hh;
-// } SocketHash;
+typedef struct internal_hash
+{
+    int socket;
+    uint16_t hashId;
+    Header header;
+    Body body;
+    UT_hash_handle hh;
+} SocketHash;
 
-// SocketHash *socket_hashes = NULL;
+SocketHash *socket_hashes = NULL;
 
-// SocketHash *find_hash(uint16_t hash)
-// {
-//     SocketHash *sh = NULL;
-//     HASH_FIND_BYHASHVALUE(hh, socket_hashes, hash, 16, 0, sh);
-//     return sh;
-// }
+PeerData peerdata; //? initialize global variable for peer information
 
-PeerData peerdata; //initialize global variable for peer information
+/* -------------------------------------------------------------------------- */
+/*                       //ANCHOR : INTERNAL HASH TABLE                       */
+/* -------------------------------------------------------------------------- */
+
+SocketHash *find_socketHash(uint16_t hash)
+{
+    SocketHash *socketHash = NULL;
+    HASH_FIND_BYHASHVALUE(hh, socket_hashes, hash, 16, 0, socketHash);
+    return socketHash;
+}
+
+/* -------------------------------------------------------------------------- */
+
+void delete_socketHash(uint16_t hashId)
+{
+    SocketHash *socketHash = NULL;
+    socketHash = find_socketHash(hashId);
+    if (socketHash != NULL)
+    {
+        HASH_DEL(socket_hashes, socketHash);
+        free(socketHash->socket);
+        free(socketHash->hashId);
+        Header *header = &socketHash->header;
+        free(header->info);
+        free(header->keyLength);
+        free(header->valueLength);
+        Body *body = &socketHash->body;
+        free(body->key);
+        free(body->value);
+        free((socketHash));
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+
+void add_socketHash(int socket, uint16_t hashId, Header header, Body body)
+{
+    if (find_socketHash(hashId) == NULL)
+    {
+        SocketHash *newSocketHash = malloc(sizeof(SocketHash));
+        newSocketHash->socket = socket;
+        newSocketHash->hashId = hashId;
+        newSocketHash->header = header;
+        newSocketHash->body = body;
+        HASH_ADD_KEYPTR_BYHASHVALUE(hh, socket_hashes, hashId, 16, 0, newSocketHash);
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+
+void deleteAllSocketHashes()
+{
+    for (SocketHash *s = socket_hashes; s != NULL; s->hh.next)
+    {
+        HASH_DEL(socket_hashes, s);
+        free(s->socket);
+        free(s->hashId);
+        Header *header = &s->header;
+        free(header->info);
+        free(header->keyLength);
+        free(header->valueLength);
+        Body *body = &s->body;
+        free(body->key);
+        free(body->value);
+        free((s));
+    }
+}
 
 /* -------------------------------------------------------------------------- */
 /*                      //ANCHOR: DISTRIBUTED HASH TABLE                      */
@@ -118,91 +180,6 @@ void deleteAll()
 }
 
 /* ------------------------- END OF DATA MANAGEMENT ------------------------- */
-
-/* -------------------------------------------------------------------------- */
-/*                        //ANCHOR: RESPONSE MANAGEMENT                       */
-/* -------------------------------------------------------------------------- */
-
-void sendDelete(int *socket)
-{
-    uint8_t info;
-    uint16_t keyLength;
-    uint32_t valueLength;
-    info = 9;
-    valueLength = 0;
-    keyLength = 0;
-    sendData(socket, (void *)(&info), 1);
-    sendData(socket, (void *)(&keyLength), 2);
-    sendData(socket, (void *)(&valueLength), 4);
-}
-
-/* -------------------------------------------------------------------------- */
-
-void sendSet(int *socket)
-{
-    uint8_t info;
-    uint16_t keyLength;
-    uint32_t valueLength;
-    info = 10;
-    valueLength = 0;
-    keyLength = 0;
-    sendData(socket, (void *)(&info), 1);
-    sendData(socket, (void *)(&keyLength), 2);
-    sendData(socket, (void *)(&valueLength), 4);
-}
-
-/* -------------------------------------------------------------------------- */
-
-void sendGet(int *socket, Element *element)
-{
-    uint8_t info = 4; // in case the key ist not in the hash table (the AKC Bit is not set )
-    uint16_t keyLength = 0;
-    uint32_t valueLength = 0;
-    void *key = NULL;
-    void *value = NULL;
-    if (element != NULL)
-    {
-        key = element->key;
-        value = element->value;
-        info = 12;
-        keyLength = htons(element->keyLength);
-        valueLength = htonl(element->valueLength);
-    }
-    sendData(socket, (void *)(&info), 1);
-    sendData(socket, (void *)(&keyLength), 2);
-    sendData(socket, (void *)(&valueLength), 4);
-    if (element != NULL)
-    {
-        sendData(socket, key, element->keyLength);
-        sendData(socket, value, element->valueLength);
-        printf("SEND GET! Clients turn now..\n");
-    }
-}
-
-/* -------------------------------------------------------------------------- */
-
-void sendRequest(int *socket, Body *body, Header *header)
-{
-    if (header->info == 1)
-    {
-        delete_element(body, header);
-        sendDelete(socket);
-        return;
-    }
-    else if (header->info == 2)
-    {
-        add_element(body, header);
-        sendSet(socket);
-    }
-    else if (header->info == 4)
-    {
-        printf("GET!\n");
-        Element *element = find_element(body, header);
-        sendGet(socket, element);
-    }
-}
-
-/* ----------------------- END OF RESPONSE MANAGEMENT ----------------------- */
 
 /* -------------------------------------------------------------------------- */
 /*     //NOTE: CREATES SOCKET AND RETURNS IT, input @clientOrServer 0 or 1    */
@@ -291,19 +268,129 @@ int createSocket(uint32_t ip, uint16_t port, int clientOrServer)
 }
 
 /* -------------------------------------------------------------------------- */
-/*                     //NOTE: SENDS DHT INTERNAL MESSAGE                     */
+/*                        //ANCHOR: RESPONSE MANAGEMENT                       */
 /* -------------------------------------------------------------------------- */
 
-int sendControl(Control *reply, Peer target)
+uint16_t getHashId(Body body)
+{
+    unsigned char *key = (unsigned char *)body.value;
+    // uint16_t result = (((unsigned short)y << 8) & 0xF00) | x; //result will be casted to uint16_t
+    uint16_t result = (*key << 8) + *(key + 8);
+    fprintf(stderr, "KEYLENGTH: %" PRIu16 "\n", result);
+    return result;
+}
+
+void sendDelete(int *socket)
+{
+    uint8_t info;
+    uint16_t keyLength;
+    uint32_t valueLength;
+    info = 9;
+    valueLength = 0;
+    keyLength = 0;
+    sendData(socket, (void *)(&info), 1);
+    sendData(socket, (void *)(&keyLength), 2);
+    sendData(socket, (void *)(&valueLength), 4);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void sendSet(int *socket)
+{
+    uint8_t info;
+    uint16_t keyLength;
+    uint32_t valueLength;
+    info = 10;
+    valueLength = 0;
+    keyLength = 0;
+    sendData(socket, (void *)(&info), 1);
+    sendData(socket, (void *)(&keyLength), 2);
+    sendData(socket, (void *)(&valueLength), 4);
+}
+
+/* -------------------------------------------------------------------------- */
+
+void sendGet(int *socket, Element *element)
+{
+    uint8_t info = 4; // in case the key ist not in the hash table (the AKC Bit is not set )
+    uint16_t keyLength = 0;
+    uint32_t valueLength = 0;
+    void *key = NULL;
+    void *value = NULL;
+    if (element != NULL)
+    {
+        key = element->key;
+        value = element->value;
+        info = 12;
+        keyLength = htons(element->keyLength);
+        valueLength = htonl(element->valueLength);
+    }
+    sendData(socket, (void *)(&info), 1);
+    sendData(socket, (void *)(&keyLength), 2);
+    sendData(socket, (void *)(&valueLength), 4);
+    if (element != NULL)
+    {
+        sendData(socket, key, element->keyLength);
+        sendData(socket, value, element->valueLength);
+        printf("SEND GET! Clients turn now..\n");
+    }
+}
+
+/* ------------------------ //ANCHOR: FORWARD REQUEST ----------------------- */
+
+void forwardRequest(Control requestData)
+{
+    int connect = createSocket(requestData.nodeIp, requestData.nodePort, 0);
+    SocketHash *sHash = find_socketHash(requestData.hashId);
+    Header *h = &(sHash->header);
+    Body *b = &(sHash->body);
+    sendData(&connect, (void *)h->info, sizeof(uint8_t));
+    sendData(&connect, (void *)h->keyLength, sizeof(uint16_t));
+    sendData(&connect, (void *)h->valueLength, sizeof(uint32_t));
+    sendData(&connect, (void *)b->key, h->keyLength);
+    sendData(&connect, (void *)b->value, h->valueLength);
+    free(h);
+    free(b);
+
+    Info *info = recvInfo(&connect);
+    if (info != NULL)
+    {
+        fprintf(stderr, "GOT THE INFO!\n");
+        Header *h = rcvHeader(&connect, info);
+        if (h != NULL)
+        {
+            fprintf(stderr, "GOT THE HEADER!\n");
+            Body *b = readBody(&connect, h);
+            if (b != NULL)
+            {
+                close(connect);
+                sendData(&sHash->socket, (void *)h->info, sizeof(uint8_t));
+                sendData(&sHash->socket, (void *)h->keyLength, sizeof(uint16_t));
+                sendData(&sHash->socket, (void *)h->valueLength, sizeof(uint32_t));
+                sendData(&sHash->socket, (void *)b->key, h->keyLength);
+                sendData(&sHash->socket, (void *)b->value, h->valueLength);
+                close(sHash->socket);
+                delete_socketHash(sHash->hashId);
+                free(sHash);
+                return;
+            }
+        }
+    }
+    fprintf(stderr, "ERROR RECIEVENG ANSWER FROM OTHER PEER\n");
+
+    close(connect);
+}
+
+int sendControl(Control *controlMessage, Peer target)
 {
     int targetfd = createSocket(target.ip, target.port, 0);
 
-    uint16_t hashId = htons(reply->hashId);
-    uint16_t nodeId = htons(reply->nodeId);
-    uint32_t nodeIp = htonl(reply->nodeIp);
-    uint16_t nodePort = htons(reply->nodePort);
+    uint16_t hashId = htons(controlMessage->hashId);
+    uint16_t nodeId = htons(controlMessage->nodeId);
+    uint32_t nodeIp = htonl(controlMessage->nodeIp);
+    uint16_t nodePort = htons(controlMessage->nodePort);
 
-    sendData(&targetfd, &(reply->info), sizeof(uint8_t));
+    sendData(&targetfd, &(controlMessage->info), sizeof(uint8_t));
     sendData(&targetfd, &(hashId), sizeof(uint16_t));
     sendData(&targetfd, &(nodeId), sizeof(uint16_t));
     sendData(&targetfd, &(nodeIp), sizeof(uint32_t));
@@ -311,6 +398,47 @@ int sendControl(Control *reply, Peer target)
 
     close(targetfd);
     return 0;
+}
+
+void sendRequest(int *socket, Body *body, Header *header)
+{
+    uint16_t hashId = getHashId(*body);
+    uint16_t selfId = peerdata.self.id;
+
+    //NOTE: GOT THE NODE IN OWN HASH TABLE
+    if (hashId <= selfId && hashId > peerdata.predecessor.id ||
+        peerdata.predecessor.id > selfId && hashId > peerdata.predecessor.id)
+    {
+
+        if (header->info == 1)
+        {
+            delete_element(body, header);
+            sendDelete(socket);
+            return;
+        }
+        else if (header->info == 2)
+        {
+            add_element(body, header);
+            sendSet(socket);
+        }
+        else if (header->info == 4)
+        {
+            printf("GET!\n");
+            Element *element = find_element(body, header);
+            sendGet(socket, element);
+        }
+    }
+    else
+    {
+        Control *lookup = malloc(sizeof(Control));
+        lookup->info = (uint8_t)129;
+        lookup->hashId = hashId;
+        lookup->nodeId = peerdata.self.id;
+        lookup->nodeIp = peerdata.self.ip;
+        lookup->nodePort = peerdata.self.port;
+        sendControl(lookup, peerdata.successor);
+        add_socketHash(*socket, hashId, *header, *body);
+    }
 }
 
 void handleRequest(int *new_sock, Info *info) //passing adress of objects
@@ -322,10 +450,10 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
         if (control != NULL)
         {
 
-            if (control->hashId > peerdata.self.id && control->hashId < peerdata.successor.id || control->hashId > peerdata.self.id && control->hashId > peerdata.successor.id && peerdata.successor.id < peerdata.self.id)
+            // ! ANSWER WITH SUCCESSOR AS CORRECT PEER
+            if (control->hashId > peerdata.self.id && control->hashId < peerdata.successor.id ||
+                control->hashId > peerdata.self.id && control->hashId > peerdata.successor.id && peerdata.successor.id < peerdata.self.id)
             {
-                // // //TODO: SEND REPLY WITH DATA OF SUCCESSOR
-
                 Peer target = {(uint16_t)0, control->nodeIp, control->nodePort};
 
                 Control *reply = malloc(sizeof(Control));
@@ -338,19 +466,25 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
                 if (sendControl(reply, target) == 0)
                 {
                     printf("Succesfully sent reply!");
+                    close(*new_sock);
                 }
                 else
                 {
+                    //TODO: HANDLE ERROR
                     fprintf(stderr, "%s/n", strerror(errno));
                 }
 
                 free(reply);
             }
-            else if (control->hashId > peerdata.successor.id)
+            // else if (control->hashId > peerdata.successor.id)
+            // ! FORWARD MESSAGE TO SUCCESSOR
+            else
             {
                 if (sendControl(control, peerdata.successor) == 0)
                 {
                     printf("Succesfully forwarded lookup!");
+                    close(*new_sock);
+                    //TODO: CHECK IF SOCKET GETS REMOVED FROM SET
                 }
                 else
                 {
@@ -367,7 +501,8 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
     {
         Control *control = recvControl(new_sock, info);
 
-        // TODO: HANDLE REPLY
+        //TODO: FORWARDS MESSAGE!
+        forwardRequest(*control);
 
         free(control);
     }
@@ -435,7 +570,6 @@ int main(int argc, char *argv[])
     setPeerData(argc, argv);
 
     fd_set master, read_fds;
-    // fd_set read_fds;
     int fdmax;
 
     socklen_t addr_size;
@@ -490,9 +624,9 @@ int main(int argc, char *argv[])
                         if (new_sock > fdmax)
                             fdmax = new_sock;
                         printf("New connection from %s on"
-                               "socket %d\n",
+                               "socket %d on Server ID: %d\n",
                                inet_ntop(AF_INET, get_in_addr((struct sockaddr *)&remoteaddr), connectIP, INET_ADDRSTRLEN),
-                               new_sock);
+                               new_sock, peerdata.self.id);
                     }
                 }
                 else
@@ -502,12 +636,13 @@ int main(int argc, char *argv[])
                     {
                         handleRequest(&curr_sock, info);
                         //TODO: ADD TO LOCAL HASHTABLE AND HANDLE SOCKET INSTEAD OF CLOSING IMMEDIATELY
-                        close(curr_sock);
-                        FD_CLR(curr_sock, &master);
+                        // close(curr_sock);
+                        // FD_CLR(curr_sock, &master);
                     }
                     else
                     {
-                        close(curr_sock);
+                        if (close(curr_sock) == -1)
+                            fprintf(stdout, "Socket %d has already been closed! Removing from master..", curr_sock);
                         FD_CLR(curr_sock, &master);
                     }
                 }

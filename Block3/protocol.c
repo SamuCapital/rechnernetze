@@ -63,6 +63,7 @@ void *receive(int *socket, void *data, int dataLength)
         if (n == 0 || receivedData == dataLength || n == -1)
             break;
     }
+
     if (n == -1 || receivedData != dataLength)
     {
         fprintf(stderr, "%s\n", strerror(errno));
