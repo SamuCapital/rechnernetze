@@ -369,7 +369,7 @@ void forwardRequest(Control requestData)
     int connect = createSocket(requestData.nodeIp, requestData.nodePort, 0);
 
     SocketHash *sHash = malloc(sizeof(SocketHash));
-    sHash = find_socketHash(&requestData.hashId); //! FIXME: ERROR IN THE HASTABLE
+    sHash = find_socketHash(&requestData.hashId);
     if (sHash != NULL)
     {
         fprintf(stderr, "Found the hashSocket\n");
@@ -381,14 +381,18 @@ void forwardRequest(Control requestData)
 
         Body *b = malloc(sizeof(Body));
         b = &(sHash->body);
+        if (h != NULL && b != NULL)
+            fprintf(stderr, "got the data from the request..");
 
-        //TODO: NETWORK TO HOST
         sendData(&connect, (void *)&(h->info), sizeof(uint8_t));
         sendData(&connect, (void *)&(keyLength), sizeof(uint16_t));
         sendData(&connect, (void *)&(valueLength), sizeof(uint32_t));
-        sendData(&connect, (void *)&(b->key), h->keyLength);
-        sendData(&connect, (void *)&(b->value), h->valueLength);
-
+        if (b != NULL)
+        {
+            fprintf(stderr, "header sent, now sending value...");
+            sendData(&connect, b->key, h->keyLength);
+            sendData(&connect, b->value, h->valueLength);
+        }
         fprintf(stderr, "Request forwarded... Waiting for reply now..\n");
         Info *info = malloc(sizeof(Info));
         info = recvInfo(&connect);
@@ -399,31 +403,34 @@ void forwardRequest(Control requestData)
             recvHeader = rcvHeader(&connect, info);
             if (recvHeader != NULL)
             {
-                fprintf(stderr, "GOT THE HEADER!\n");
-                Body *recvBody = malloc(sizeof(Body));
-                recvBody = readBody(&connect, recvHeader);
-                if (recvBody != NULL)
-                {
-                    close(connect);
+                fprintf(stderr, "GOT THE HEADER! Sending it to peer...\n");
+                keyLength = htons(recvHeader->keyLength);
+                valueLength = htonl(recvHeader->valueLength);
+                sendData(&sHash->socket, (void *)&(recvHeader->info), 1);
+                sendData(&sHash->socket, (void *)&(keyLength), 2);
+                sendData(&sHash->socket, (void *)&(valueLength), 4);
+                close(connect); // !TODO PROBABLY SHOULDNT DO THIS
 
-                    keyLength = htons(recvHeader->keyLength);
-                    valueLength = htonl(recvHeader->valueLength);
-                    sendData(&sHash->socket, (void *)&(recvHeader->info), sizeof(uint8_t));
-                    sendData(&sHash->socket, (void *)&(keyLength), sizeof(uint16_t));
-                    sendData(&sHash->socket, (void *)&(valueLength), sizeof(uint32_t));
-                    sendData(&sHash->socket, (void *)&(recvBody->key), recvHeader->keyLength);
-                    sendData(&sHash->socket, (void *)&(recvBody->value), recvHeader->valueLength);
-                    close(sHash->socket);
-                    delete_socketHash(sHash->hashId);
-                    free(sHash);
-                    free(h);
-                    free(b);
-                    free(info);
-                    free(recvHeader);
+                if (recvHeader->info == 12) //? case answer for get request
+                {
+                    Body *recvBody = malloc(sizeof(Body));
+                    recvBody = readBody(&connect, recvHeader);
+                    if (recvBody != NULL)
+                    {
+
+                        sendData(&sHash->socket, recvBody->key, recvHeader->keyLength);
+                        sendData(&sHash->socket, recvBody->value, recvHeader->valueLength);
+                    }
                     free(recvBody);
-                    return;
                 }
-                free(recvBody);
+                close(sHash->socket);
+                delete_socketHash(sHash->hashId);
+                free(sHash);
+                free(h);
+                free(b);
+                free(info);
+                free(recvHeader);
+                return;
             }
             free(recvHeader);
         }
@@ -710,8 +717,8 @@ int main(int argc, char *argv[])
                     {
                         handleRequest(&curr_sock, info);
                         //TODO: ADD TO LOCAL HASHTABLE AND HANDLE SOCKET INSTEAD OF CLOSING IMMEDIATELY
-                        close(curr_sock);
-                        FD_CLR(curr_sock, &master);
+                        // close(curr_sock);
+                        // FD_CLR(curr_sock, &master);
                     }
                     else
                     {
