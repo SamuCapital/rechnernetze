@@ -65,12 +65,7 @@ SocketHash *find_socketHash(uint16_t *hash)
 {
     fprintf(stderr, "searching for socketHashs %" PRIu16 " in hashtable..\n", *hash);
     SocketHash *socketHash = NULL;
-    // HASH_FIND(hh, socket_hashes, hash, 16, socketHash);
     HASH_FIND(hh, socket_hashes, hash, sizeof(uint16_t), socketHash);
-    // HASH_FIND_BYHASHVALUE(hh, socket_hashes, &hash, 16, 0, socketHash);
-    // HASH_FIND_INT()
-
-    // HASH_FIND(hh, socket_hashes, hash, 16, socketHash);
     return socketHash;
 }
 
@@ -82,19 +77,27 @@ void delete_socketHash(uint16_t hashId)
     socketHash = find_socketHash(&hashId);
     if (socketHash != NULL)
     {
-        fprintf(stderr, "Removing socket %d with hash %" PRIu16 " from local HashTable!\n", socket, hashId);
+        fprintf(stderr, "Removing socket %d with hash %" PRIu16 " from local HashTable!\n", socketHash->socket, hashId);
 
         HASH_DEL(socket_hashes, socketHash);
-        free(&(socketHash->socket));
-        free(&(socketHash->hashId));
-        Header *header = &socketHash->header;
-        free(&(header->info));
-        free(&(header->keyLength));
-        free(&(header->valueLength));
-        Body *body = &socketHash->body;
-        free(&(body->key));
-        free(&(body->value));
-        free((socketHash));
+        fprintf(stderr, "Hash deleted!");
+        // Body *body = malloc(sizeof(body));
+        // body = &socketHash->body;
+        // free(socketHash->body.key);
+        // free(socketHash->body.value);
+        // free(body);
+
+        // fprintf(stderr, "freed body!");
+
+        // free(&(socketHash->socket));
+        // free(&(socketHash->hashId));
+        // Header *header = malloc(sizeof(Header));
+        // header = &socketHash->header;
+        // free(&(header->info));
+        // free(&(header->keyLength));
+        // free(&(header->valueLength));
+        // free(header);
+        // free((socketHash));
     }
 }
 
@@ -104,7 +107,6 @@ void add_socketHash(int socket, uint16_t *hashId, Header header, Body body)
 {
     if (find_socketHash(hashId) == NULL)
     {
-
         SocketHash *newSocketHash = malloc(sizeof(SocketHash));
         newSocketHash->socket = socket;
         newSocketHash->hashId = *hashId;
@@ -154,6 +156,8 @@ Element *find_element(Body *body, Header *header)
 {
     Element *element = NULL;
     HASH_FIND_BYHASHVALUE(hh, elements, body->key, header->keyLength, 0, element);
+    if (element == NULL)
+        fprintf(stderr, "couldnt find element...\n");
     return element;
 }
 
@@ -184,6 +188,10 @@ void add_element(Body *body, Header *header)
         newElement->keyLength = header->keyLength;
         newElement->valueLength = header->valueLength;
         HASH_ADD_KEYPTR_BYHASHVALUE(hh, elements, newElement->key, newElement->keyLength, 0, newElement);
+
+        unsigned int amount_elements;
+        amount_elements = HASH_COUNT(elements);
+        printf("there are %u sockets in the table!\n\n", amount_elements);
     }
 }
 
@@ -378,9 +386,11 @@ void forwardRequest(Control requestData)
         h = &(sHash->header);
         uint16_t keyLength = htons(h->keyLength);
         uint32_t valueLength = htonl(h->valueLength);
-
         Body *b = malloc(sizeof(Body));
-        b = &(sHash->body);
+        if (h->info == 2) //? case set request
+        {
+            b = &(sHash->body);
+        }
         if (h != NULL && b != NULL)
             fprintf(stderr, "got the data from the request..");
 
@@ -393,6 +403,8 @@ void forwardRequest(Control requestData)
             sendData(&connect, b->key, h->keyLength);
             sendData(&connect, b->value, h->valueLength);
         }
+        // free(h);
+        // free(b);
         fprintf(stderr, "Request forwarded... Waiting for reply now..\n");
         Info *info = malloc(sizeof(Info));
         info = recvInfo(&connect);
@@ -417,29 +429,28 @@ void forwardRequest(Control requestData)
                     recvBody = readBody(&connect, recvHeader);
                     if (recvBody != NULL)
                     {
-
                         sendData(&sHash->socket, recvBody->key, recvHeader->keyLength);
                         sendData(&sHash->socket, recvBody->value, recvHeader->valueLength);
                     }
                     free(recvBody);
                 }
                 close(sHash->socket);
+                FD_CLR(sHash->socket, &master);
                 delete_socketHash(sHash->hashId);
-                free(sHash);
-                free(h);
-                free(b);
-                free(info);
-                free(recvHeader);
+
+                // free(sHash);
+
+                // free(info);
+                // free(recvHeader);
                 return;
             }
-            free(recvHeader);
         }
         free(h);
         free(b);
         free(info);
     }
     fprintf(stderr, "ERROR RECIEVENG ANSWER FROM OTHER PEER\n");
-    free(sHash);
+    // free(sHash);
     close(connect);
 }
 
@@ -562,7 +573,7 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
             {
                 if (sendControl(control, peerdata.successor) == 0)
                 {
-                    fprintf(stderr, "Succesfully forwarded lookup!");
+                    fprintf(stderr, "Succesfully forwarded lookup!\n");
                     // close(*new_sock);
                     //TODO: CHECK IF SOCKET GETS REMOVED FROM SET
                 }
@@ -574,6 +585,8 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
             }
         }
         free(control);
+        close(*new_sock);
+        FD_CLR(*new_sock, &master);
     }
 
     //? Case Reply for own Lookup
@@ -583,6 +596,7 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
 
         //TODO: FORWARDS MESSAGE!
         forwardRequest(*control);
+        fprintf(stderr, "Request sent to client! Continue selecting now...\n\n");
 
         free(control);
     }
