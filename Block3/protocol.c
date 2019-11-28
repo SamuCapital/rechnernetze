@@ -230,5 +230,5 @@ void printControlDetails(uint32_t ip, uint16_t port)
 {
     char connectIp[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(ip), connectIp, INET_ADDRSTRLEN);
-    fprintf(stderr, "Sending Control to %s on Port: %" PRIu16 "...\n\n", connectIp, port);
+    fprintf(stderr, "Sending Message to %s on Port: %" PRIu16 "...\n\n", connectIp, port);
 }

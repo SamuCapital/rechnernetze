@@ -27,7 +27,6 @@ typedef struct my_peerdata
     Peer predecessor;
     Peer self;
     Peer successor;
-
 } PeerData;
 
 typedef struct my_struct
@@ -56,6 +55,42 @@ SocketHash *socket_hashes = NULL;
 PeerData peerdata; //? initialize global variable for peer information
 
 fd_set master;
+
+uint16_t getHashId(Body body)
+{
+    unsigned char *key = (unsigned char *)body.key;
+    if (sizeof(body.key) < 2)
+    {
+        //TODO: FILL NULL BYTES
+    }
+
+    uint16_t result = (*key << 8) + *(key + 8);
+    fprintf(stderr, "HASHID: %" PRIu16 "\n", result);
+    fprintf(stderr, "BITWISE: ");
+    // for (int i = 0; i < 16; i++)
+    // {
+    //     fprintf(stderr, "%d", (int)(result << i));
+    // }
+    uint16_t r = result;
+    int c = 0;
+    // while (r)
+    for (int i = 0; i < 16; i++)
+
+    {
+        if (r & 1)
+            fprintf(stderr, "1");
+        else
+            fprintf(stderr, "0");
+        c += 1;
+        if (c % 4 == 0)
+            fprintf(stderr, " ");
+        r >>= 1;
+    }
+    printf("\n");
+    fprintf(stderr, "\n\n");
+
+    return result;
+}
 
 /* -------------------------------------------------------------------------- */
 /*                       //ANCHOR : INTERNAL HASH TABLE                       */
@@ -109,7 +144,7 @@ void add_socketHash(int socket, uint16_t *hashId, Header header, Body body)
     {
         SocketHash *newSocketHash = malloc(sizeof(SocketHash));
         newSocketHash->socket = socket;
-        newSocketHash->hashId = *hashId;
+        newSocketHash->hashId = *hashId; //!FIXME pointer or value
         newSocketHash->header = header;
         newSocketHash->body = body;
         HASH_ADD(hh, socket_hashes, hashId, sizeof(uint16_t), newSocketHash);
@@ -121,7 +156,10 @@ void add_socketHash(int socket, uint16_t *hashId, Header header, Body body)
         SocketHash *foundHash = malloc(sizeof(SocketHash));
         foundHash = find_socketHash(hashId);
         if (foundHash != NULL)
-            fprintf(stderr, "Socket %d has been added succesfully!\n", foundHash->socket);
+        {
+            fprintf(stderr, "Socket %d has been added succesfully!\n", foundHash->socket, foundHash->hashId);
+            getHashId(foundHash->body);
+        }
         else
             fprintf(stderr, "Cant find sockethash..\n");
     }
@@ -152,6 +190,17 @@ void deleteAllSocketHashes()
 
 Element *elements = NULL;
 
+/* -------------------------------------------------------------------------- */
+
+void printCountElements()
+{
+    unsigned int amount_elements;
+    amount_elements = HASH_COUNT(elements);
+    printf("there are %u elements in the table!\n\n", amount_elements);
+}
+
+/* -------------------------------------------------------------------------- */
+
 Element *find_element(Body *body, Header *header)
 {
     Element *element = NULL;
@@ -173,7 +222,9 @@ void delete_element(Body *body, Header *header)
         free(element->key);
         free(element->value);
         free((element));
+        fprintf(stderr, "deleting element... ");
     }
+    printCountElements();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -189,9 +240,8 @@ void add_element(Body *body, Header *header)
         newElement->valueLength = header->valueLength;
         HASH_ADD_KEYPTR_BYHASHVALUE(hh, elements, newElement->key, newElement->keyLength, 0, newElement);
 
-        unsigned int amount_elements;
-        amount_elements = HASH_COUNT(elements);
-        printf("there are %u sockets in the table!\n\n", amount_elements);
+        fprintf(stderr, "adding element... ");
+        printCountElements();
     }
 }
 
@@ -300,15 +350,6 @@ int createSocket(uint32_t ip, uint16_t port, int clientOrServer)
 /*                        //ANCHOR: RESPONSE MANAGEMENT                       */
 /* -------------------------------------------------------------------------- */
 
-uint16_t getHashId(Body body)
-{
-    unsigned char *key = (unsigned char *)body.value;
-    // uint16_t result = (((unsigned short)y << 8) & 0xF00) | x; //result will be casted to uint16_t
-    uint16_t result = (*key << 8) + *(key + 8);
-    fprintf(stderr, "HASHID: %" PRIu16 "\n", result);
-    return result;
-}
-
 void sendDelete(int *socket)
 {
     uint8_t info;
@@ -361,6 +402,7 @@ void sendGet(int *socket, Element *element)
     sendData(socket, (void *)(&valueLength), 4);
     if (element != NULL)
     {
+        fprintf(stderr, "key / value NULL? %d %d", key == NULL, value == NULL);
         sendData(socket, key, element->keyLength);
         sendData(socket, value, element->valueLength);
         fprintf(stderr, "Clients turn now..\n");
@@ -387,22 +429,24 @@ void forwardRequest(Control requestData)
         uint16_t keyLength = htons(h->keyLength);
         uint32_t valueLength = htonl(h->valueLength);
         Body *b = malloc(sizeof(Body));
-        if (h->info == 2) //? case set request
-        {
-            b = &(sHash->body);
-        }
+        // if (h->info == 2) //? case set request
+        // {
+        b = &(sHash->body);
+        // }
         if (h != NULL && b != NULL)
-            fprintf(stderr, "got the data from the request..");
+            fprintf(stderr, "got the data from the request!..\n");
 
         sendData(&connect, (void *)&(h->info), sizeof(uint8_t));
         sendData(&connect, (void *)&(keyLength), sizeof(uint16_t));
         sendData(&connect, (void *)&(valueLength), sizeof(uint32_t));
         if (b != NULL)
         {
-            fprintf(stderr, "header sent, now sending value...");
+            fprintf(stderr, "header sent, now sending value...\n");
             sendData(&connect, b->key, h->keyLength);
             sendData(&connect, b->value, h->valueLength);
         }
+        fprintf(stderr, "SENT ");
+        getHashId(*b);
         // free(h);
         // free(b);
         fprintf(stderr, "Request forwarded... Waiting for reply now..\n");
@@ -415,33 +459,32 @@ void forwardRequest(Control requestData)
             recvHeader = rcvHeader(&connect, info);
             if (recvHeader != NULL)
             {
+                Body *recvBody = malloc(sizeof(Body));
+                if (recvHeader->info == 12) //? case answer for get request
+                {
+                    recvBody = readBody(&connect, recvHeader);
+                }
+                close(connect); // !TODO PROBABLY SHOULDNT DO THIS
+
                 fprintf(stderr, "GOT THE HEADER! Sending it to peer...\n");
                 keyLength = htons(recvHeader->keyLength);
                 valueLength = htonl(recvHeader->valueLength);
-                sendData(&sHash->socket, (void *)&(recvHeader->info), 1);
-                sendData(&sHash->socket, (void *)&(keyLength), 2);
-                sendData(&sHash->socket, (void *)&(valueLength), 4);
-                close(connect); // !TODO PROBABLY SHOULDNT DO THIS
-
-                if (recvHeader->info == 12) //? case answer for get request
+                sendData(&sHash->socket, (void *)&(recvHeader->info), sizeof(uint8_t));
+                sendData(&sHash->socket, (void *)&(keyLength), sizeof(uint16_t));
+                sendData(&sHash->socket, (void *)&(valueLength), sizeof(uint32_t));
+                if (recvBody != NULL)
                 {
-                    Body *recvBody = malloc(sizeof(Body));
-                    recvBody = readBody(&connect, recvHeader);
-                    if (recvBody != NULL)
-                    {
-                        sendData(&sHash->socket, recvBody->key, recvHeader->keyLength);
-                        sendData(&sHash->socket, recvBody->value, recvHeader->valueLength);
-                    }
-                    free(recvBody);
+                    sendData(&sHash->socket, recvBody->key, recvHeader->keyLength);
+                    sendData(&sHash->socket, recvBody->value, recvHeader->valueLength);
                 }
+                free(recvBody);
                 close(sHash->socket);
                 FD_CLR(sHash->socket, &master);
                 delete_socketHash(sHash->hashId);
-
-                // free(sHash);
-
+                // free(h);
+                // free(b);
                 // free(info);
-                // free(recvHeader);
+                free(recvHeader);
                 return;
             }
         }
@@ -502,6 +545,8 @@ void sendRequest(int *socket, Body *body, Header *header)
             Element *element = find_element(body, header);
             sendGet(socket, element);
         }
+        close(*socket);
+        FD_CLR(*socket, &master);
     }
     else if (hashId > peerdata.self.id && hashId < peerdata.successor.id ||
              hashId > peerdata.self.id && hashId > peerdata.successor.id && peerdata.successor.id < peerdata.self.id)
@@ -660,7 +705,6 @@ void setPeerData(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
-
     setPeerData(argc, argv);
 
     fd_set read_fds;
