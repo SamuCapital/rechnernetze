@@ -7,11 +7,15 @@
 SET:
 
 ./clientVorgabe 127.0.0.1 4752 SET /pics/cat.jpg < ./pics/cat.jpg 
+./clientVorgabe 127.0.0.1 4752 SET lake < ./pics/lake.jpg 
 
 
 GET: 
 
 ./clientVorgabe 127.0.0.1 4752 GET /pics/cat.jpg > cat.jpg 
+
+./clientVorgabe 127.0.0.1 4752 GET lake > PICTURE.jpg
+
 
 DELETE: 
 

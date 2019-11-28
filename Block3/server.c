@@ -56,42 +56,6 @@ PeerData peerdata; //? initialize global variable for peer information
 
 fd_set master;
 
-uint16_t getHashId(Body body)
-{
-    unsigned char *key = (unsigned char *)body.key;
-    if (sizeof(body.key) < 2)
-    {
-        //TODO: FILL NULL BYTES
-    }
-
-    uint16_t result = (*key << 8) + *(key + 8);
-    fprintf(stderr, "HASHID: %" PRIu16 "\n", result);
-    fprintf(stderr, "BITWISE: ");
-    // for (int i = 0; i < 16; i++)
-    // {
-    //     fprintf(stderr, "%d", (int)(result << i));
-    // }
-    uint16_t r = result;
-    int c = 0;
-    // while (r)
-    for (int i = 0; i < 16; i++)
-
-    {
-        if (r & 1)
-            fprintf(stderr, "1");
-        else
-            fprintf(stderr, "0");
-        c += 1;
-        if (c % 4 == 0)
-            fprintf(stderr, " ");
-        r >>= 1;
-    }
-    printf("\n");
-    fprintf(stderr, "\n\n");
-
-    return result;
-}
-
 /* -------------------------------------------------------------------------- */
 /*                       //ANCHOR : INTERNAL HASH TABLE                       */
 /* -------------------------------------------------------------------------- */
@@ -118,9 +82,8 @@ void delete_socketHash(uint16_t hashId)
         fprintf(stderr, "Hash deleted!");
         // Body *body = malloc(sizeof(body));
         // body = &socketHash->body;
-        // free(socketHash->body.key);
+        // free(&(socketHash->body.key));
         // free(socketHash->body.value);
-        // free(body);
 
         // fprintf(stderr, "freed body!");
 
@@ -149,19 +112,10 @@ void add_socketHash(int socket, uint16_t *hashId, Header header, Body body)
         newSocketHash->body = body;
         HASH_ADD(hh, socket_hashes, hashId, sizeof(uint16_t), newSocketHash);
 
-        fprintf(stderr, "Adding socket %d with hash %" PRIu16 " to local HashTable! \n", socket, *hashId);
-        unsigned int amount_sockets;
-        amount_sockets = HASH_COUNT(socket_hashes);
-        printf("there are %u sockets in the table!\n\n", amount_sockets);
-        SocketHash *foundHash = malloc(sizeof(SocketHash));
-        foundHash = find_socketHash(hashId);
-        if (foundHash != NULL)
-        {
-            fprintf(stderr, "Socket %d has been added succesfully!\n", foundHash->socket, foundHash->hashId);
-            getHashId(foundHash->body);
-        }
-        else
-            fprintf(stderr, "Cant find sockethash..\n");
+        // fprintf(stderr, "Adding socket %d with hash %" PRIu16 " to local HashTable! \n", socket, *hashId);
+        // unsigned int amount_sockets;
+        // amount_sockets = HASH_COUNT(socket_hashes);
+        // printf("there are %u sockets in the table!\n\n", amount_sockets);
     }
 }
 /* -------------------------------------------------------------------------- */
@@ -259,6 +213,37 @@ void deleteAll()
 }
 
 /* ------------------------- END OF DATA MANAGEMENT ------------------------- */
+
+uint16_t getHashId(Body body)
+{
+    unsigned char *key = (unsigned char *)body.key;
+    if (sizeof(body.key) < 2)
+    {
+        //TODO: FILL NULL BYTES
+    }
+
+    uint16_t result = (*key << 8) + *(key + 8);
+    fprintf(stderr, "HASHID: %" PRIu16 "\n", result);
+    fprintf(stderr, "BITWISE: ");
+    uint16_t r = result;
+    int c = 0;
+    for (int i = 0; i < 16; i++)
+
+    {
+        if (r & 1)
+            fprintf(stderr, "1");
+        else
+            fprintf(stderr, "0");
+        c += 1;
+        if (c % 4 == 0)
+            fprintf(stderr, " ");
+        r >>= 1;
+    }
+    printf("\n");
+    fprintf(stderr, "\n\n");
+
+    return result;
+}
 
 /* -------------------------------------------------------------------------- */
 /*     //NOTE: CREATES SOCKET AND RETURNS IT, input @clientOrServer 0 or 1    */
@@ -429,61 +414,54 @@ void forwardRequest(Control requestData)
         uint16_t keyLength = htons(h->keyLength);
         uint32_t valueLength = htonl(h->valueLength);
         Body *b = malloc(sizeof(Body));
-        // if (h->info == 2) //? case set request
-        // {
         b = &(sHash->body);
-        // }
         if (h != NULL && b != NULL)
             fprintf(stderr, "got the data from the request!..\n");
 
         sendData(&connect, (void *)&(h->info), sizeof(uint8_t));
         sendData(&connect, (void *)&(keyLength), sizeof(uint16_t));
         sendData(&connect, (void *)&(valueLength), sizeof(uint32_t));
+
         if (b != NULL)
         {
             fprintf(stderr, "header sent, now sending value...\n");
             sendData(&connect, b->key, h->keyLength);
             sendData(&connect, b->value, h->valueLength);
         }
-        fprintf(stderr, "SENT ");
-        getHashId(*b);
-        // free(h);
-        // free(b);
-        fprintf(stderr, "Request forwarded... Waiting for reply now..\n");
-        Info *info = malloc(sizeof(Info));
-        info = recvInfo(&connect);
+
+        Info *info = recvInfo(&connect);
         if (info != NULL)
         {
             fprintf(stderr, "GOT THE INFO!\n");
-            Header *recvHeader = malloc(sizeof(Header));
-            recvHeader = rcvHeader(&connect, info);
+            Header *recvHeader = rcvHeader(&connect, info);
             if (recvHeader != NULL)
             {
-                Body *recvBody = malloc(sizeof(Body));
-                if (recvHeader->info == 12) //? case answer for get request
-                {
-                    recvBody = readBody(&connect, recvHeader);
-                }
-                close(connect); // !TODO PROBABLY SHOULDNT DO THIS
-
                 fprintf(stderr, "GOT THE HEADER! Sending it to peer...\n");
                 keyLength = htons(recvHeader->keyLength);
                 valueLength = htonl(recvHeader->valueLength);
                 sendData(&sHash->socket, (void *)&(recvHeader->info), sizeof(uint8_t));
                 sendData(&sHash->socket, (void *)&(keyLength), sizeof(uint16_t));
                 sendData(&sHash->socket, (void *)&(valueLength), sizeof(uint32_t));
+
+                Body *recvBody = NULL;
+
+                if (recvHeader->info == 12) //? case answer for get request
+                {
+                    recvBody = readBody(&connect, recvHeader);
+                }
+
+                close(connect); // !TODO PROBABLY SHOULDNT DO THIS
+
                 if (recvBody != NULL)
                 {
                     sendData(&sHash->socket, recvBody->key, recvHeader->keyLength);
                     sendData(&sHash->socket, recvBody->value, recvHeader->valueLength);
                 }
+
                 free(recvBody);
                 close(sHash->socket);
                 FD_CLR(sHash->socket, &master);
                 delete_socketHash(sHash->hashId);
-                // free(h);
-                // free(b);
-                // free(info);
                 free(recvHeader);
                 return;
             }
