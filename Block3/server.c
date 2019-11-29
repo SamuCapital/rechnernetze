@@ -131,10 +131,10 @@ void add_socketHash(int *socket, uint16_t *hashId, Header header, Body body, int
         newSocketHash->header = header;
         newSocketHash->body = body;
         newSocketHash->origin_socket = origin_socket;
+
         HASH_ADD(hh1, socket_hashes_byHashId, hashId, sizeof(uint16_t), newSocketHash);
         HASH_ADD(hh2, socket_hashes_bySocket, socket, sizeof(int), newSocketHash);
 
-        // fprintf(stderr, "Adding socket %d with hash %" PRIu16 " to local HashTable! \n", socket, *hashId);
         unsigned int amount_sockets;
         amount_sockets = HASH_CNT(hh1, socket_hashes_byHashId);
         printf("there are %u sockets in the table!\n\n", amount_sockets);
@@ -147,6 +147,7 @@ void add_socketHash(int *socket, uint16_t *hashId, Header header, Body body, int
         newSocketHash->header = header;
         newSocketHash->body = body;
         newSocketHash->origin_socket = origin_socket;
+
         HASH_ADD(hh1, socket_hashes_byHashId, hashId, sizeof(uint16_t), newSocketHash);
         HASH_ADD(hh2, socket_hashes_bySocket, socket, sizeof(int), newSocketHash);
 
@@ -470,66 +471,6 @@ void requestToTarget(Header *header, Body *body, int socket)
     }
 }
 
-// void forwardRequest(Control requestData)
-// {
-//     printControl(&requestData);
-//     // printControlDetails(requestData.nodeIp, requestData.nodePort);
-//     fprintf(stderr, "Gonna forward the og request now!...\n");
-//     int connect = createSocket(requestData.nodeIp, requestData.nodePort, 0);
-
-//     SocketHash *sHash = malloc(sizeof(SocketHash));
-//     sHash = find_socketHash_byHashId(&requestData.hashId);
-//     if (sHash != NULL)
-//     {
-//         requestToTarget(&(sHash->header), &(sHash->body), connect);
-
-//         //! TILL HERE
-
-//         Info *info = recvInfo(&connect);
-//         if (info != NULL)
-//         {
-//             fprintf(stderr, "GOT THE INFO!\n");
-//             Header *recvHeader = rcvHeader(&connect, info);
-//             if (recvHeader != NULL)
-//             {
-//                 fprintf(stderr, "GOT THE HEADER! Sending it to peer...\n");
-
-//                 uint16_t keyLength = htons(recvHeader->keyLength);
-//                 uint32_t valueLength = htonl(recvHeader->valueLength);
-//                 sendData(&sHash->socket, (void *)&(recvHeader->info), sizeof(uint8_t));
-//                 sendData(&sHash->socket, (void *)&(keyLength), sizeof(uint16_t));
-//                 sendData(&sHash->socket, (void *)&(valueLength), sizeof(uint32_t));
-
-//                 Body *recvBody = NULL;
-
-//                 if (recvHeader->info == 12) //? case answer for get request
-//                 {
-//                     recvBody = readBody(&connect, recvHeader);
-//                 }
-
-//                 close(connect); // !TODO PROBABLY SHOULDNT DO THIS
-
-//                 if (recvBody != NULL)
-//                 {
-//                     sendData(&sHash->socket, recvBody->key, recvHeader->keyLength);
-//                     sendData(&sHash->socket, recvBody->value, recvHeader->valueLength);
-//                 }
-
-//                 free(recvBody);
-//                 close(sHash->socket);
-//                 FD_CLR(sHash->socket, &master);
-//                 delete_socketHash(sHash->hashId);
-//                 free(recvHeader);
-//                 return;
-//             }
-//         }
-//         free(info);
-//     }
-//     fprintf(stderr, "ERROR RECIEVENG ANSWER FROM OTHER PEER\n");
-//     // free(sHash);
-//     close(connect);
-// }
-
 int sendControl(Control *controlMessage, Peer target)
 {
     printControl(controlMessage);
@@ -547,6 +488,7 @@ int sendControl(Control *controlMessage, Peer target)
     sendData(&targetfd, &(nodeId), sizeof(uint16_t));
     sendData(&targetfd, &(nodeIp), sizeof(uint32_t));
     sendData(&targetfd, &(nodePort), sizeof(uint16_t));
+
     fprintf(stderr, "Sent the control!");
     close(targetfd);
     return 0;
@@ -616,12 +558,14 @@ void sendRequest(int *socket, Body *body, Header *header)
     else
     {
         fprintf(stderr, "Not this Peers job, sending lookup..\n");
+
         Control *lookup = malloc(sizeof(Control));
         lookup->info = (uint8_t)129;
         lookup->hashId = hashId;
         lookup->nodeId = peerdata.self.id;
         lookup->nodeIp = peerdata.self.ip;
         lookup->nodePort = peerdata.self.port;
+
         sendControl(lookup, peerdata.successor);
         add_socketHash(socket, &hashId, *header, *body, *socket);
     }
@@ -655,24 +599,19 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
                 }
                 else
                 {
-                    //TODO: HANDLE ERROR
                     fprintf(stderr, "%s/n", strerror(errno));
                 }
                 free(reply);
             }
-            // else if (control->hashId > peerdata.successor.id)
             // ! FORWARD MESSAGE TO SUCCESSOR
             else
             {
                 if (sendControl(control, peerdata.successor) == 0)
                 {
                     fprintf(stderr, "Succesfully forwarded lookup!\n");
-                    // close(*new_sock);
-                    //TODO: CHECK IF SOCKET GETS REMOVED FROM SET
                 }
                 else
                 {
-                    //TODO: HANDLE ERROR
                     fprintf(stderr, "%s/n", strerror(errno));
                 }
             }
@@ -687,8 +626,6 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
     {
         Control *control = recvControl(new_sock, info);
 
-        //TODO: FORWARDS MESSAGE!
-        // forwardRequest(*control);
         printControl(control);
 
         int connect = createSocket(control->nodeIp, control->nodePort, 0);
@@ -698,10 +635,9 @@ void handleRequest(int *new_sock, Info *info) //passing adress of objects
         {
             //? TO PEER WHOS GOT THE DATA
             requestToTarget(&(sHash->header), &(sHash->body), connect);
-            // update_socketHash(&(sHash->hashId), 1);
+
             //NOTE: Adding socket to masterSet so that one can recieve the reply without blocking
             printCountSocketHash();
-
             delete_socketHash(sHash->hashId, NULL);
             add_socketHash(&connect, &(sHash->hashId), sHash->header, sHash->body, sHash->socket);
             printCountSocketHash();
@@ -838,9 +774,6 @@ int main(int argc, char *argv[])
                     if (info != NULL)
                     {
                         handleRequest(&curr_sock, info);
-                        //TODO: ADD TO LOCAL HASHTABLE AND HANDLE SOCKET INSTEAD OF CLOSING IMMEDIATELY
-                        // close(curr_sock);
-                        // FD_CLR(curr_sock, &master);
                     }
                     else
                     {
