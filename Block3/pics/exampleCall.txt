@@ -1,23 +1,25 @@
-./server  245 127.0.0.1 4750 15 127.0.0.1 4751 112 127.0.0.1 4752
-
 ./server 15 127.0.0.1 4751 112 127.0.0.1 4752 245 127.0.0.1 4750
 
 ./server 112 127.0.0.1 4752 245 127.0.0.1 4750 15 127.0.0.1 4751  
 
+./server  245 127.0.0.1 4750 15 127.0.0.1 4751 112 127.0.0.1 4752
 
 
 SET:
 
 ./clientVorgabe 127.0.0.1 4752 SET /pics/cat.jpg < ./pics/cat.jpg 
 ./clientVorgabe 127.0.0.1 4752 SET lake < ./pics/lake.jpg 
-./clientVorgabe 127.0.0.1 4760 SET 1 < ./pics/lake.jpg 
+./clientVorgabe 127.0.0.1 4750 SET 1 < ./pics/lake.jpg 
 
 
 GET: 
 
 ./clientVorgabe 127.0.0.1 4752 GET /pics/cat.jpg > cat.jpg 
 
-./clientVorgabe 127.0.0.1 4752 GET lake > PICTURE.jpg
+./clientVorgabe 127.0.0.1 4752 GET lake > 123.jpg
+
+./clientVorgabe 127.0.0.1 4750 GET lake > newLake.jpg
+
 
 
 DELETE: 
