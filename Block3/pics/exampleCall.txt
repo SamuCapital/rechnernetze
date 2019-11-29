@@ -4,10 +4,13 @@
 
 ./server 112 127.0.0.1 4752 245 127.0.0.1 4750 15 127.0.0.1 4751  
 
+
+
 SET:
 
 ./clientVorgabe 127.0.0.1 4752 SET /pics/cat.jpg < ./pics/cat.jpg 
 ./clientVorgabe 127.0.0.1 4752 SET lake < ./pics/lake.jpg 
+./clientVorgabe 127.0.0.1 4760 SET 1 < ./pics/lake.jpg 
 
 
 GET: 
@@ -22,6 +25,9 @@ DELETE:
 ./clientVorgabe 127.0.0.1 4752 DELETE /pics/cat.jpg
 
 
+# ----------------------------------- DEBUG ---------------------------------- #
+
+./server 100 127.0.0.1 4752 50 127.0.0.1 4760 200 127.0.0.1 4751  
 
 # ---------------------------------------------------------------------------- #
 #                                     DEBUG                                    #
@@ -36,3 +42,22 @@ HASHID: 12148
 BITWISE: 0010 1110
          1111 0100 
 
+
+# ---------------------------------------------------------------------------- #
+#                                     CASES                                    #
+# ---------------------------------------------------------------------------- #
+
+Data flow: 
+
+get request -> send lookup
+    => waiting for lookup
+
+recieving answer -> send og request to target
+    => waiting for answer
+
+recieving target answer -> sending request to clientVorgabe
+    => done // deleting
+
+
+//? 0 = recieving lookup-reply
+//? 1 = recieving target-reply
