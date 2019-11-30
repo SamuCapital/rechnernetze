@@ -702,6 +702,8 @@ void setPeerData(int argc, char *argv[])
     peerdata.predecessor = pre;
     peerdata.self = self;
     peerdata.successor = suc;
+    int i = endian();
+    fprintf(stderr, "ENDIAN: %d\n\n", i);
 }
 
 int main(int argc, char *argv[])

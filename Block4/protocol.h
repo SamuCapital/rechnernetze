@@ -39,5 +39,6 @@ void sendData(int *socket, void *data, int dataLength);
 void printHeader(Header *header);
 void printControl(Control *control);
 void printControlDetails(uint32_t ip, uint16_t port);
+int endian();
 
 #endif //UNTITLED_PROTOCOL_H
