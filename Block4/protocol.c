@@ -18,13 +18,47 @@
 #include "protocol.h"
 #include "uthash.h"
 
-#define LITTLE_ENDIAN 0
-#define BIG_ENDIAN 1
+#define LITTLE_ENDIAN_INFO 0
+#define BIG_ENDIAN_INFO 1
+
+int endian()
+{
+    int i = 1;
+    char *p = (char *)&i;
+
+    if (p[0] == 1)
+        return LITTLE_ENDIAN_INFO;
+    else
+        return BIG_ENDIAN_INFO;
+}
+
+void *networkByteOrder(void *data, int dataLength)
+{
+    if (endian() == LITTLE_ENDIAN_INFO)
+    {
+        fprintf(stderr, "System architecture is little endian... Working on it!\n");
+        char *datac = malloc(dataLength);
+        memcpy(datac, data, dataLength);
+        int right = dataLength - 1;
+        int left = 0;
+        while (left < right)
+        {
+            char c = datac[right];
+            datac[right] = datac[left];
+            datac[left] = c;
+            left += 1;
+            right -= 1;
+        }
+        return datac;
+        // data = (void *)datac;
+    }
+    return data;
+}
 
 void *receive(int *socket, void *data, int dataLength)
 {
     int n, x, receivedData = 0;
-    data = malloc(2 * dataLength);
+    data = malloc(dataLength);
     char *datac = (char *)data;
     fprintf(stderr, "starting to read...\n");
 
@@ -138,21 +172,20 @@ Body *readBody(int *socket, Header *header)
     Body *body = malloc(sizeof(Body));
     void *key = NULL;
     void *value = NULL; //(dont forget to free , if data nis not there)
-    key = receive(socket, key, header->keyLength);
-    fprintf(stderr, "%s\n", "about to read value...\n");
 
-    body->key = key;
+    key = receive(socket, key, header->keyLength);
+    body->key = networkByteOrder(key, header->keyLength);
 
     value = receive(socket, value, header->valueLength);
-    fprintf(stderr, "%s\n", "error not in value...\n");
-    body->value = value;
+    body->value = networkByteOrder(value, header->valueLength);
+
     return body;
 }
 void sendData(int *socket, void *data, int dataLength)
 {
     int n = 0;
     int sentData = 0;
-    char *datac = (char *)data; //cast every pointer to char pointer , to read the buffer byte after Byte
+    char *datac = (char *)data; //cast every pointer to char pointer, to read the buffer byte after Byte
     while (1)
     {
         n = send(*socket, datac + sentData, dataLength - sentData, 0);
@@ -192,33 +225,4 @@ void printControlDetails(uint32_t ip, uint16_t port)
     char connectIp[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(ip), connectIp, INET_ADDRSTRLEN);
     fprintf(stderr, "Sending Message to %s on Port: %" PRIu16 "...\n\n", connectIp, port);
-}
-
-int endian()
-{
-    int i = 1;
-    char *p = (char *)&i;
-
-    if (p[0] == 1)
-        return LITTLE_ENDIAN;
-    else
-        return BIG_ENDIAN;
-}
-
-char *htonData(char *data, int dataLength)
-{
-    if (endian == 0)
-    {
-        int right = dataLength - 1;
-        int left = 0;
-        while (left < right)
-        {
-            char c = data[right];
-            data[right] = data[left];
-            data[left] = c;
-            left += 1;
-            right -= 1;
-        }
-    }
-    return data;
 }

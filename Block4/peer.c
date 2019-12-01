@@ -270,33 +270,38 @@ void deleteAll()
 
 /* ------------------------- END OF DATA MANAGEMENT ------------------------- */
 
-uint16_t getHashId(Body body)
+uint16_t getHashId(Body body, uint16_t keyLength)
 {
-    unsigned char *key = (unsigned char *)body.key;
-    if (sizeof(body.key) < 2)
+    uint16_t result = 0;
+    if (body.key != NULL)
     {
-        //TODO: FILL NULL BYTES
-    }
+        fprintf(stderr, "Getting Hash...\n");
+        void *nboKey = networkByteOrder(body.key, keyLength);
+        unsigned char *key = (unsigned char *)nboKey;
 
-    uint16_t result = (*key << 8) + *(key + 8);
-    fprintf(stderr, "HASHID: %" PRIu16 "\n", result);
-    fprintf(stderr, "BITWISE: ");
-    uint16_t r = result;
-    int c = 0;
-    for (int i = 0; i < 16; i++)
-    {
-        if (r & 1)
-            fprintf(stderr, "1");
-        else
-            fprintf(stderr, "0");
-        c += 1;
-        if (c % 4 == 0)
-            fprintf(stderr, " ");
-        r >>= 1;
+        result = (*key << 8);
+        if (keyLength > 1)
+        {
+            result += *(key + 1);
+        }
+        fprintf(stderr, "Key: %s || %s \n", body.key, nboKey);
+        fprintf(stderr, "HASHID: %" PRIu16 "\n", result);
+        fprintf(stderr, "BITWISE: ");
+        uint16_t r = result;
+        int c = 0;
+        for (int i = 0; i < 16; i++)
+        {
+            if (r & 1)
+                fprintf(stderr, "1");
+            else
+                fprintf(stderr, "0");
+            c += 1;
+            if (c % 4 == 0)
+                fprintf(stderr, " ");
+            r >>= 1;
+        }
+        fprintf(stderr, "\n\n");
     }
-    fprintf(stderr, "\n");
-    fprintf(stderr, "\n\n");
-
     return result;
 }
 
@@ -443,8 +448,8 @@ void sendGet(int *socket, Element *element)
     if (element != NULL)
     {
         fprintf(stderr, "key / value NULL? %d %d", key == NULL, value == NULL);
-        sendData(socket, key, element->keyLength);
-        sendData(socket, value, element->valueLength);
+        sendData(socket, networkByteOrder(key, element->keyLength), element->keyLength);
+        sendData(socket, networkByteOrder(value, element->valueLength), element->valueLength);
         fprintf(stderr, "Clients turn now..\n");
     }
 }
@@ -466,8 +471,8 @@ void requestToTarget(Header *header, Body *body, int socket)
     if (body != NULL)
     {
         fprintf(stderr, ", now sending value...\n");
-        sendData(&socket, body->key, header->keyLength);
-        sendData(&socket, body->value, header->valueLength);
+        sendData(&socket, networkByteOrder(body->key, header->keyLength), header->keyLength);
+        sendData(&socket, networkByteOrder(body->value, header->valueLength), header->valueLength);
     }
 }
 
@@ -496,7 +501,7 @@ int sendControl(Control *controlMessage, Peer target)
 
 void sendRequest(int *socket, Body *body, Header *header)
 {
-    uint16_t hashId = getHashId(*body);
+    uint16_t hashId = getHashId(*body, header->keyLength);
     uint16_t selfId = peerdata.self.id;
     SocketHash *socketHash = malloc(sizeof(SocketHash));
     socketHash = find_socketHash_bySocket(socket);
@@ -703,7 +708,7 @@ void setPeerData(int argc, char *argv[])
     peerdata.self = self;
     peerdata.successor = suc;
     int i = endian();
-    fprintf(stderr, "ENDIAN: %d\n\n", i);
+    fprintf(stderr, "System is %s based!\n\n", i == 0 ? "little endian" : "big endian");
 }
 
 int main(int argc, char *argv[])
