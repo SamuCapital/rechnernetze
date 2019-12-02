@@ -18,47 +18,55 @@
 #include "protocol.h"
 #include "uthash.h"
 
-// #define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"
-// #define BYTE_TO_BINARY(byte)       \
-//     (byte & 0x80 ? '1' : '0'),     \
-//         (byte & 0x40 ? '1' : '0'), \
-//         (byte & 0x20 ? '1' : '0'), \
-//         (byte & 0x10 ? '1' : '0'), \
-//         (byte & 0x08 ? '1' : '0'), \
-//         (byte & 0x04 ? '1' : '0'), \
-//         (byte & 0x02 ? '1' : '0'), \
-//         (byte & 0x01 ? '1' : '0')
+#define LITTLE_ENDIAN_INFO 0
+#define BIG_ENDIAN_INFO 1
 
-//FIXME: NOT WORKING PROPERLY FOR CLIENT GET REQUEST
+int endian()
+{
+    int i = 1;
+    char *p = (char *)&i;
+
+    if (p[0] == 1)
+        return LITTLE_ENDIAN_INFO;
+    else
+        return BIG_ENDIAN_INFO;
+}
+
+void *networkByteOrder(void *data, int dataLength)
+{
+    if (endian() == LITTLE_ENDIAN_INFO)
+    {
+        fprintf(stderr, "System architecture is little endian... Working on it!\n");
+        char *datac = malloc(dataLength);
+        memcpy(datac, data, dataLength);
+        int right = dataLength - 1;
+        int left = 0;
+        while (left < right)
+        {
+            char c = datac[right];
+            datac[right] = datac[left];
+            datac[left] = c;
+            left += 1;
+            right -= 1;
+        }
+        return datac;
+        // data = (void *)datac;
+    }
+    return data;
+}
+
 void *receive(int *socket, void *data, int dataLength)
 {
     int n, x, receivedData = 0;
-    data = malloc(2 * dataLength);
+    data = malloc(dataLength);
     char *datac = (char *)data;
     fprintf(stderr, "starting to read...\n");
-    int readSize = 0;
-    if (dataLength < 1024)
-    {
-        readSize = dataLength;
-    }
-    else if ((dataLength / 10) < 10480)
-    {
-        readSize = dataLength / 10;
-    }
-    else
-    {
-        readSize = 10480;
-    }
 
     while (1)
     {
-        if ((dataLength - receivedData) < readSize)
-            readSize = dataLength - receivedData;
         n = read(*socket, datac + receivedData, dataLength - receivedData);
-        // n = recv(*socket, datac + receivedData, readSize, 0);
 
         receivedData += n;
-        // // fprintf(stderr, "read %d bytes!\n", n);
 
         if (n == 0 || receivedData == dataLength || n == -1)
             break;
@@ -70,7 +78,6 @@ void *receive(int *socket, void *data, int dataLength)
         if (receivedData != dataLength)
         {
             fprintf(stderr, "number of Bytes is not enough to read the packet\n");
-            // exit(1);
         }
         return NULL;
     }
@@ -78,18 +85,12 @@ void *receive(int *socket, void *data, int dataLength)
 
     int READLENGTH = 128;
 
-    // int n, recieved;
     data = malloc(dataLength);
-    // while (1)
-    // {
     n = recv(*socket, data, dataLength, 0);
-    // }
 
     if (n == -1)
     {
         fprintf(stderr, "%s/n", strerror(errno));
-        // if (receivedData != dataLength)
-        //     fprintf(stderr, "number of Bytes is not enough to read the packet");
         return NULL;
     }
     return data;
@@ -146,10 +147,8 @@ Control *recvControl(int *socket, Info *info)
 
 Header *rcvHeader(int *socket, Info *info)
 {
-    // uint8_t *info; // old
     uint16_t *keyLength;
     uint32_t *valueLength;
-    // info = (uint8_t *)(receive(socket, info, 1));
     keyLength = (uint16_t *)(receive(socket, keyLength, 2));
     valueLength = (uint32_t *)(receive(socket, valueLength, 4));
     if (info != NULL && keyLength != NULL && valueLength != NULL)
@@ -168,30 +167,25 @@ Header *rcvHeader(int *socket, Info *info)
     free(valueLength);
     return NULL;
 }
-//if youre reading this guys, remind me to free my Mallocs
 Body *readBody(int *socket, Header *header)
 {
     Body *body = malloc(sizeof(Body));
     void *key = NULL;
     void *value = NULL; //(dont forget to free , if data nis not there)
-    key = receive(socket, key, header->keyLength);
-    fprintf(stderr, "%s\n", "about to read value...\n");
 
-    body->key = key;
-    // fprintf(stderr, "%s\n", "Value length: %" PRIu32 "\n", "!", header->valueLength);
+    key = receive(socket, key, header->keyLength);
+    body->key = networkByteOrder(key, header->keyLength);
 
     value = receive(socket, value, header->valueLength);
-    fprintf(stderr, "%s\n", "error not in value...\n");
-    body->value = value;
+    body->value = networkByteOrder(value, header->valueLength);
+
     return body;
 }
 void sendData(int *socket, void *data, int dataLength)
 {
-    // fprintf(stderr, "%d bit of data to be sent!:\n", dataLength);
     int n = 0;
     int sentData = 0;
-    char *datac = (char *)data; //cast every pointer to char pointer , to read the buffer byte after Byte
-    // fprintf(stderr, "Leading text " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY((int)data), "\n");
+    char *datac = (char *)data; //cast every pointer to char pointer, to read the buffer byte after Byte
     while (1)
     {
         n = send(*socket, datac + sentData, dataLength - sentData, 0);
@@ -204,10 +198,10 @@ void sendData(int *socket, void *data, int dataLength)
     if (n == -1)
     {
         fprintf(stderr, "%s/n", strerror(errno));
-        // return -1;
     }
-    //return sentData;
 }
+
+/* ---------------------------- SUPPORT FUNCTIONS --------------------------- */
 
 void printHeader(Header *header)
 {
@@ -230,5 +224,5 @@ void printControlDetails(uint32_t ip, uint16_t port)
 {
     char connectIp[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(ip), connectIp, INET_ADDRSTRLEN);
-    fprintf(stderr, "Sending Control to %s on Port: %" PRIu16 "...\n\n", connectIp, port);
+    fprintf(stderr, "Sending Message to %s on Port: %" PRIu16 "...\n\n", connectIp, port);
 }
